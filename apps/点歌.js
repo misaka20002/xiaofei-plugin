@@ -473,14 +473,14 @@ async function music_message(e) {
 			return false;
 		}
 
-		if ((reg[1]?.includes('语音') || reg[1]?.includes('歌词') || reg[1]?.includes('下载音乐')) && !reg[2]) {
+		if ((reg[1]?.includes('播放') || reg[1]?.includes('歌词') || reg[1]?.includes('下载音乐')) && !reg[2]) {
 			reg[2] = String((data.index + 1) + data.start_index);
 		}
 
 		let index = (Number(reg[2]) - 1) - data.start_index;
 
 		if (data.data.length > index && index > -1) {
-			if (data.data.length < 2 && !reg[1]?.includes('语音') && !reg[1]?.includes('歌词') && !reg[1]?.includes('下载音乐')) {
+			if (data.data.length < 2 && !reg[1]?.includes('播放') && !reg[1]?.includes('歌词') && !reg[1]?.includes('下载音乐')) {
 				return false;
 			}
 			data.index = index;
@@ -488,7 +488,7 @@ async function music_message(e) {
 
 			if (!reg[1]?.includes('歌词')) {
 				let music_json = await CreateMusicShareJSON(music);
-				if (reg[1] && (reg[1].includes('语音') || reg[1]?.includes('下载音乐'))) {
+				if (reg[1] && (reg[1].includes('播放') || reg[1]?.includes('下载音乐'))) {
 					if (!music_json.meta.music || !music_json.meta.music?.musicUrl) {
 						await e.reply('[' + music.name + '-' + music.artist + ']获取下载地址失败！');
 						return true;
