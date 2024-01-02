@@ -101,7 +101,7 @@ var music_cookies = {
 	}
 };
 
-const music_reg = '^#?(小飞)?(' + Object.keys(music_source).join('|') + '|多选)?(' + Object.keys(music_source).join('|') + '|多选)?(点播音乐|点播|点歌|播放|放一?首|来一?首|下一页|个性电台|每日推荐|每日30首|日推|我的收藏|我喜欢的歌)(.*)$';
+const music_reg = '^#?(小飞)?(' + Object.keys(music_source).join('|') + '|多选)?(' + Object.keys(music_source).join('|') + '|多选)?(点播音乐|点播|点歌|放一?首|来一?首|下一页|个性电台|每日推荐|每日30首|日推|我的收藏|我喜欢的歌)(.*)$';
 export class xiaofei_music extends plugin {
 	constructor() {
 		super({
@@ -197,7 +197,7 @@ export class xiaofei_music extends plugin {
 
 	/** 接受到消息都会先执行一次 */
 	accept() {
-		if (/^#?(小飞语音|小飞高清语音|小飞歌词|语音|高清语音|歌词|下载音乐)?(\d+)?$/.test(this.e.msg)) {
+		if (/^#?(小飞播放|小飞高清播放|小飞歌词|播放|歌词|下载音乐)?(\d+)?$/.test(this.e.msg)) {
 			music_message(this.e);
 		}
 		return;
@@ -326,7 +326,7 @@ if (!xiaofei_plugin.music_poke_cd) {
 if (xiaofei_plugin.music_guild) Bot.off('guild.message', xiaofei_plugin.music_guild);
 xiaofei_plugin.music_guild = async (e) => {//处理频道消息
 	e.msg = e.raw_message;
-	if (RegExp(music_reg).test(e.msg) || /^#?(小飞语音|小飞高清语音|小飞歌词|语音|高清语音|歌词|下载音乐)?(\d+)?$/.test(e.msg)) {
+	if (RegExp(music_reg).test(e.msg) || /^#?(小飞播放|小飞高清播放|小飞歌词|播放|歌词|下载音乐)?(\d+)?$/.test(e.msg)) {
 		music_message(e);
 	}
 };
@@ -425,9 +425,9 @@ async function recallMusicMsg(key, msg_results) {
 }
 
 async function music_message(e) {
-	let reg = /^#?(小飞语音|小飞高清语音|小飞歌词|语音|高清语音|歌词|下载音乐)?(\d+)?$/.exec(e.msg);
+	let reg = /^#?(小飞播放|小飞高清播放|小飞歌词|播放|歌词|下载音乐)?(\d+)?$/.exec(e.msg);
 	if (reg) {
-		if (e.source && (reg[1]?.includes('语音') || reg[1]?.includes('下载音乐'))) {
+		if (e.source && (reg[1]?.includes('播放') || reg[1]?.includes('下载音乐'))) {
 			let source;
 			if (e.isGroup) {
 				source = (await e.group.getChatHistory(e.source.seq, 1)).pop();
@@ -440,20 +440,27 @@ async function music_message(e) {
 					if (music_json['view'] == 'music') {
 						let music = music_json.meta.music;
 
-						await e.reply('开始上传[' + music.title + '-' + music.desc + ']。。。');
-						let result = await e.reply(await uploadRecord(music.musicUrl, 0, !reg[1].includes('高清'), music.title + '-' + music.desc));
+						await e.reply('歌曲：[' + music.title + '-' + music.desc + ']');
+						// 如果有“播放”则使用silk高清转码
+						let result = await e.reply(await uploadRecord(music.musicUrl, 0, !reg[1].includes('播放'), music.title + '-' + music.desc));
 						if (!result) {
-							result = '上传[' + music.title + '-' + music.desc + ']失败！\n' + music.musicUrl;
-							await e.reply(result);
-							return true;
+							e.reply('silk转码失败，尝试使用ffmpeg', false, { recallMsg: 10 })
+							// 如果高清“播放”失败转为使用ffmpeg
+							let result = await e.reply(await uploadRecord(music.musicUrl, 0, reg[1].includes('播放'), music.title + '-' + music.desc));
+							if (!result) {
+								result = '上传[' + music.title + '-' + music.desc + ']失败！\n' + music.musicUrl;
+								await e.reply(result);
+								return true;
+							}
 						}
-						if (reg[1].includes('高清') && result) {
-							try {
-								let message = await Bot.getMsg(result.message_id);
-								if (Array.isArray(message.message)) message.message.push({ type: 'text', text: '[语音]' });
-								(e.group || e.friend)?.sendMsg('PCQQ不要播放，否则会导致语音无声音！', message);
-							} catch (err) { }
-						}
+						/**如果是“高清”的话发送带有引用result.message_id的消息'PCQQ不要播放，否则会导致语音无声音！' */
+						// if (reg[1].includes('高清') && result) {
+						// 	try {
+						// 		let message = await Bot.getMsg(result.message_id);
+						// 		if (Array.isArray(message.message)) message.message.push({ type: 'text', text: '[语音]' });
+						// 		(e.group || e.friend)?.sendMsg('PCQQ不要播放，否则会导致语音无声音！', message);
+						// 	} catch (err) { }
+						// }
 					}
 				} catch (err) { }
 				return true;
@@ -487,21 +494,28 @@ async function music_message(e) {
 						return true;
 					}
 
-					await e.reply('开始上传[' + music.name + '-' + music.artist + ']。。。');
-					let result = await uploadRecord(music_json.meta.music.musicUrl, 0, !reg[1].includes('高清'), music.name + '-' + music.artist);
+					await e.reply('歌曲：[' + music.name + '-' + music.artist + ']');
+					// 如果有“播放”则使用silk高清转码
+					let result = await uploadRecord(music_json.meta.music.musicUrl, 0, !reg[1].includes('播放'), music.name + '-' + music.artist);
 					if (!result) {
-						result = '上传[' + music.name + '-' + music.artist + ']失败！\n' + music_json.meta.music.musicUrl;
-						await e.reply(result);
-						return true;
+						e.reply('silk转码失败，尝试使用ffmpeg', false, { recallMsg: 10 })
+						// 如果高清“播放”失败转为使用ffmpeg
+						let result = await uploadRecord(music_json.meta.music.musicUrl, 0, reg[1].includes('播放'), music.name + '-' + music.artist);
+						if (!result) {
+							result = '上传[' + music.name + '-' + music.artist + ']失败！\n' + music_json.meta.music.musicUrl;
+							await e.reply(result);
+							return true;
+						}
 					}
 					result = await e.reply(result);
-					if (reg[1].includes('高清') && result) {
-						try {
-							let message = await Bot.getMsg(result.message_id);
-							if (Array.isArray(message.message)) message.message.push({ type: 'text', text: '[语音]' });
-							(e.group || e.friend)?.sendMsg('PCQQ不要播放，否则会导致语音无声音！', message);
-						} catch (err) { }
-					}
+					/**如果是“高清”的话发送带有引用result.message_id的消息'PCQQ不要播放，否则会导致语音无声音！' */
+					// if (reg[1].includes('高清') && result) {
+					// 	try {
+					// 		let message = await Bot.getMsg(result.message_id);
+					// 		if (Array.isArray(message.message)) message.message.push({ type: 'text', text: '[语音]' });
+					// 		(e.group || e.friend)?.sendMsg('PCQQ不要播放，否则会导致语音无声音！', message);
+					// 	} catch (err) { }
+					// }
 					return true;
 				}
 				let body = await CreateMusicShare(e, music);
@@ -951,7 +965,7 @@ function ShareMusic_JSONList(e, list, page, page_size, title = '') {
 
 	cmdList.push({
 		"cmdDesc": "播放语音",
-		"cmd": " #(高清)语音+序号",
+		"cmd": " #播放+序号",
 		"cmdTitle": "发送"
 	});
 	return { data: json };
