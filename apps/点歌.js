@@ -101,7 +101,7 @@ var music_cookies = {
 	}
 };
 
-const music_reg = '^#?(小飞)?(' + Object.keys(music_source).join('|') + '|多选)?(' + Object.keys(music_source).join('|') + '|多选)?(点播音乐|点播|点歌|放一?首|来一?首|下一页|个性电台|每日推荐|每日30首|日推|我的收藏|我喜欢的歌)(.*)$';
+const music_reg = '^#?(小飞)?(' + Object.keys(music_source).join('|') + '|搜索)?(' + Object.keys(music_source).join('|') + '|搜索)?(点播音乐|点播|点歌|放一?首|来一?首|下一页|个性电台|每日推荐|每日30首|日推|我的收藏|我喜欢的歌)(.*)$';
 export class xiaofei_music extends plugin {
 	constructor() {
 		super({
@@ -593,16 +593,16 @@ async function music_message(e) {
 	source = [source, reg[3]];
 
 	if (search == '' && reg[4] != '下一页' && reg[4] != '个性电台' && reg[4] != '每日推荐' && reg[4] != '每日30首' && reg[4] != '日推' && !((reg[4] == '来首' || reg[4] == '放首') && search == '歌') && reg[4] != '我的收藏' && reg[4] != '我喜欢的歌') {
-		let help = "------点歌说明------\r\n格式：#点歌 #多选点歌\r\n支持：QQ、网易、酷我、酷狗\r\n例如：#QQ点歌 #多选QQ点歌"
+		let help = "------点歌说明------\r\n格式：#点歌 #搜索点歌\r\n支持：QQ、网易、酷我、酷狗\r\n例如：#QQ点歌 #搜索QQ点歌"
 		await e.reply(help, true);
 		return true;
 	}
 
-	if (setting['is_list'] == true) reg[2] = '多选';
+	if (setting['is_list'] == true) reg[2] = '搜索';
 
 	let temp_data = {};
-	let page = reg[2] == '多选' ? 1 : 0;
-	let page_size = reg[2] == '多选' ? _page_size : 10;
+	let page = reg[2] == '搜索' ? 1 : 0;
+	let page_size = reg[2] == '搜索' ? _page_size : 10;
 
 
 	if (((reg[4] == '来首' || reg[4] == '放首') && search == '歌')) {
@@ -669,7 +669,7 @@ async function music_handle(e, search, source, page = 0, page_size = 10, temp_da
 		let temp = data[key];
 		if (temp?.msg_results && (temp?.search != search || temp?.source[0] != source[0] || page < 2 || !temp_data?.data)) {
 			delete data[key];
-			recallMusicMsg(key, temp.msg_results);//撤回上一条多选点歌列表
+			recallMusicMsg(key, temp.msg_results);//撤回上一条搜索点歌列表
 		}
 		data = {};
 
