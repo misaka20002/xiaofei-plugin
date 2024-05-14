@@ -1,10 +1,12 @@
-import plugin from '../../../lib/plugins/plugin.js';
-import fetch from "node-fetch";
-import { Config, Data, Version, Plugin_Path } from '../components/index.js';
 import fs from 'fs';
 import md5 from 'md5';
 import crypto from 'crypto';
+import fetch from "node-fetch";
+import plugin from '../../../lib/plugins/plugin.js';
+import { Config, Data, Version, Plugin_Path } from '../components/index.js';
 
+let toSilk
+try{ toSilk = (await import('../model/toSilk.js')).default; } catch{ };
 const no_pic = '';
 var _page_size = 20;
 var _music_timeout = 1000 * 60 * 3;
@@ -175,13 +177,13 @@ export class xiaofei_music extends plugin {
 		});
 	}
 
-	async music_task() {
+	async music_task(e) {
 		let data = xiaofei_plugin.music_temp_data;
 		for (let key in data) {
 			if ((new Date().getTime() - data[key].time) > _music_timeout) {
 				let temp = data[key];
 				delete data[key];
-				await recallMusicMsg(key, temp.msg_results);
+				await recallMusicMsg(e, key, temp.msg_results);
 			}
 		}
 		try {
@@ -209,10 +211,12 @@ export class xiaofei_music extends plugin {
 			{
 				name: 'QQ音乐',
 				ck: (music_cookies.qqmusic.ck && music_cookies.qqmusic.ck.get('qqmusic_key')),
+				cookies: music_cookies.qqmusic.ck,
 				user_info: get_qqmusic_userinfo
 			}, {
 				name: '网易云音乐',
 				ck: !music_cookies.netease.ck?.includes('MUSIC_U=;'),
+				cookies: music_cookies.netease.ck,
 				user_info: get_netease_userinfo
 			}
 		];
@@ -221,7 +225,7 @@ export class xiaofei_music extends plugin {
 			if (!val.ck) {
 				msgs.push(`状态：未设置ck`);
 			} else {
-				let result = await val.user_info();
+				let result = await val.user_info(val.cookies);
 				if (result.code == 1) {
 					let data = result.data;
 					let userid = String(data.userid);
@@ -238,8 +242,8 @@ export class xiaofei_music extends plugin {
 		}
 		let MsgList = [];
 		let user_info = {
-			nickname: Bot.nickname,
-			user_id: Bot.uin
+			nickname: e.bot?.nickname || Bot?.nickname,
+			user_id: e.bot?.uin || e?.self_id || Bot.uin
 		};
 		MsgList.push({
 			...user_info,
@@ -289,8 +293,8 @@ export class xiaofei_music extends plugin {
 
 		let MsgList = [];
 		let user_info = {
-			nickname: Bot.nickname,
-			user_id: Bot.uin
+			nickname: e.bot?.nickname || Bot?.nickname,
+			user_id: e.bot?.uin || e.self_id || Bot.uin
 		};
 
 		let msgs = ['格式：#提交音乐ck+音乐ck'];
@@ -313,6 +317,32 @@ export class xiaofei_music extends plugin {
 		await e.reply(forwardMsg);
 		return true;
 	}
+
+}
+
+async function recallMusicMsg(e, key, msg_results) {
+	if (msg_results && msg_results.length > 0) {
+		for (let msg_result of msg_results) {
+			let arr = key?.split('_');
+			let type = arr[0];
+			for (let val of msg_result) {
+				try {
+					val = await val;
+					let message_id = (await val?.message)?.message_id || val?.message_id;
+					switch (type) {
+						case 'group':
+							await (e?.bot || Bot?.[arr[3]] || Bot)?.pickGroup(arr[1]).recallMsg(message_id);
+							break;
+						case 'friend':
+							await (e?.bot || Bot?.[arr[2]] || Bot)?.pickFriend(arr[1]).recallMsg(message_id);
+							break;
+					}
+				} catch (err) {
+					logger.error(err);
+				}
+			}
+		}
+	}
 }
 
 if (!xiaofei_plugin.music_temp_data) {
@@ -334,8 +364,8 @@ Bot.on('guild.message', xiaofei_plugin.music_guild);
 
 if (xiaofei_plugin.music_notice) Bot.off('notice', xiaofei_plugin.music_notice);
 xiaofei_plugin.music_notice = async (e) => {//处理通知
-	if (e?.sub_type != 'poke' || e.target_id != Bot.uin) return;
-	e.user_id = e.operator_id;
+	if (e?.sub_type != 'poke' || e?.target_id != e?.self_id) return;
+	e.user_id = e?.operator_id;
 	let key = get_MusicListId(e);
 	let time = xiaofei_plugin.music_poke_cd[key] || 0;
 	if ((new Date().getTime() - time) < 8000) return;
@@ -399,31 +429,6 @@ async function update_qqmusic_ck() {
 	}
 }
 
-async function recallMusicMsg(key, msg_results) {
-	if (msg_results && msg_results.length > 0) {
-		for (let msg_result of msg_results) {
-			let arr = key.split('_');
-			let type = arr[0];
-			for (let val of msg_result) {
-				try {
-					val = await val;
-					let message_id = (await val?.message)?.message_id || val?.message_id;
-					switch (type) {
-						case 'group':
-							await Bot.pickGroup(arr[1]).recallMsg(message_id);
-							break;
-						case 'friend':
-							await Bot.pickFriend(arr[1]).recallMsg(message_id);
-							break;
-					}
-				} catch (err) {
-					logger.error(err);
-				}
-			}
-		}
-	}
-}
-
 async function music_message(e) {
 	let reg = /^#?(小飞播放|小飞高清播放|小飞歌词|播放|歌词|下载音乐)?(\d+)?$/.exec(e.msg);
 	if (reg) {
@@ -441,25 +446,31 @@ async function music_message(e) {
 						let music = music_json.meta.music;
 
 						await e.reply('歌曲：[' + music.title + '-' + music.desc + ']');
+						
 						// 如果有“播放”则使用silk高清转码
-						let result = await e.reply(await uploadRecord(music.musicUrl, 0, !reg[1].includes('播放'), music.title + '-' + music.desc));
-						if (!result) {
-							e.reply('silk转码失败，尝试使用ffmpeg', false, { recallMsg: 10 })
-							// 如果高清“播放”失败转为使用ffmpeg
-							let result = await e.reply(await uploadRecord(music.musicUrl, 0, reg[1].includes('播放'), music.title + '-' + music.desc));
-							if (!result) {
-								result = '上传[' + music.title + '-' + music.desc + ']失败！\n' + music.musicUrl;
-								await e.reply(result);
-								return true;
-							}
+						let result, isHigh
+						try {
+							result = await uploadRecord(music.musicUrl, 0, !reg[1].includes('播放'), music.title + '-' + music.desc);
+							isHigh = true
+						} catch (error) {
+							logger.error(error)
+							result = await segment.record(await toSilk(music.musicUrl) || music.musicUrl);
+							isHigh = false
 						}
-						/**如果是“高清”的话发送带有引用result.message_id的消息'PCQQ不要播放，否则会导致语音无声音！' */
-						// if (reg[1].includes('高清') && result) {
+						if (!isHigh) {
+							const tip = '上传[' + music.title + '-' + music.desc + ']失败！\n' + '链接：' + music.musicUrl + '\n尝试上传普通语音'
+							await e.reply(tip);
+						}
+						result = await e.reply(result);
+						// if (reg[1].includes('播放') && result && isHigh) {
 						// 	try {
-						// 		let message = await Bot.getMsg(result.message_id);
+						// 		let message = await (Bot || e.bot || e.group || e.friend)?.getMsg(result.message_id);
 						// 		if (Array.isArray(message.message)) message.message.push({ type: 'text', text: '[语音]' });
-						// 		(e.group || e.friend)?.sendMsg('PCQQ不要播放，否则会导致语音无声音！', message);
-						// 	} catch (err) { }
+						// 		await (e.group || e.friend)?.sendMsg('PCQQ不要播放，否则会导致语音无声音！', message);
+						// 	} catch (err) {
+						// 		let message = [ await segment.reply(result.message_id), `PCQQ不要播放，否则会导致语音无声音！` ];
+						// 		await (e.group || e.friend)?.sendMsg(message);
+						// 	}
 						// }
 					}
 				} catch (err) { }
@@ -495,31 +506,35 @@ async function music_message(e) {
 					}
 
 					await e.reply('歌曲：[' + music.name + '-' + music.artist + ']');
-					// 如果有“播放”则使用silk高清转码
-					let result = await uploadRecord(music_json.meta.music.musicUrl, 0, !reg[1].includes('播放'), music.name + '-' + music.artist);
-					if (!result) {
-						e.reply('silk转码失败，尝试使用ffmpeg', false, { recallMsg: 10 })
-						// 如果高清“播放”失败转为使用ffmpeg
-						let result = await uploadRecord(music_json.meta.music.musicUrl, 0, reg[1].includes('播放'), music.name + '-' + music.artist);
-						if (!result) {
-							result = '上传[' + music.name + '-' + music.artist + ']失败！\n' + music_json.meta.music.musicUrl;
-							await e.reply(result);
-							return true;
-						}
+
+					let result, isHigh
+					try {
+						result = await uploadRecord(e, music_json.meta.music.musicUrl, 0, !reg[1].includes('播放'), music.name + '-' + music.artist);
+						isHigh = true
+					} catch (error) {
+						logger.error(error)
+						result = await segment.record(await toSilk(music_json.meta.music.musicUrl) || music_json.meta.music.musicUrl);
+						isHigh = false
 					}
-					result = await e.reply(result);
-					/**如果是“高清”的话发送带有引用result.message_id的消息'PCQQ不要播放，否则会导致语音无声音！' */
-					// if (reg[1].includes('高清') && result) {
+					if (!isHigh) {
+						const tip = '上传[' + music.name + '-' + music.artist + ']失败！\n' + '链接：' + music_json.meta.music.musicUrl + '\n尝试上传普通语音'
+						await e.reply(tip);
+					}
+					result = await e.reply(result)
+					// if (reg[1].includes('播放') && result && isHigh) {
 					// 	try {
-					// 		let message = await Bot.getMsg(result.message_id);
+					// 		let message = await (Bot || e.bot || e.group || e.friend)?.getMsg(result.message_id);
 					// 		if (Array.isArray(message.message)) message.message.push({ type: 'text', text: '[语音]' });
-					// 		(e.group || e.friend)?.sendMsg('PCQQ不要播放，否则会导致语音无声音！', message);
-					// 	} catch (err) { }
+					// 		await (e.group || e.friend)?.sendMsg('PCQQ不要播放，否则会导致语音无声音！', message);
+					// 	} catch (err) {
+					// 		let message = [ await segment.reply(result.message_id), `PCQQ不要播放，否则会导致语音无声音！` ];
+					// 		await (e.group || e.friend)?.sendMsg(message);
+					// 	}
 					// }
 					return true;
 				}
 				let body = await CreateMusicShare(e, music);
-				await SendMusicShare(body);
+				await SendMusicShare(e, body);
 			} else {
 				try {
 					typeof (music.lrc) == 'function' ? music.lrc = await music.lrc(music.data) : music.lrc = music.lrc;
@@ -532,8 +547,8 @@ async function music_message(e) {
 				if (!Array.isArray(lrcs)) lrcs = [lrcs];
 
 				let user_info = {
-					nickname: Bot.nickname,
-					user_id: Bot.uin
+					nickname: e.bot?.nickname || Bot?.nickname,
+					user_id: e.bot?.uin || e?.self_id || Bot.uin
 				};
 				let MsgList = [];
 
@@ -662,7 +677,7 @@ async function music_message(e) {
 }
 
 async function music_handle(e, search, source, page = 0, page_size = 10, temp_data = {}) {
-	let result = await music_search(search, source[0], page == 0 ? 1 : page, page_size);
+	let result = await music_search(e, search, source[0], page == 0 ? 1 : page, page_size);
 	if (result && result.data && result.data.length > 0) {
 		let key = get_MusicListId(e);
 		let data = xiaofei_plugin.music_temp_data;
@@ -717,13 +732,17 @@ async function music_handle(e, search, source, page = 0, page_size = 10, temp_da
 			}
 		} else {
 			if (['qq_radio', 'qq_recommend', 'qq_like', 'qq_DailyRecommend'].includes(source[0])) {
-				let title;
-				let nickname = e.sender.nickname || e.user_id;
+				let title, nickname = e.sender.nickname || e.user_id;
 				if (e.isGroup) {
 					try {
-						let info = await Bot.getGroupMemberInfo(e.group_id, e.user_id)
-						nickname = info.card || info.nickname;
-					} catch (err) { }
+						let info = await e.bot?.getGroupMemberInfo(e.group_id, e.user_id)
+						nickname = info?.card || info?.nickname;
+					} catch (err) {
+						let info = e.bot.pickMember(e.group_id, e.user_id);
+						nickname = info?.info?.card || info?.info?.nickname;
+					} finally {
+						nickname = e.sender.nickname || e.user_id;
+					}
 				}
 
 				let user_info = {
@@ -766,10 +785,17 @@ async function music_handle(e, search, source, page = 0, page_size = 10, temp_da
 						music = music_json.meta.music;
 						music.tag = index + '.' + tag;
 						//json_list.push(music_json);
-						MsgList.push({
-							...user_info,
-							message: segment.json(music_json)
-						});
+						if (Version.isTrss) {
+							MsgList.push({
+								...user_info,
+								message: { type: "json", data: music_json }
+							});
+						} else {
+							MsgList.push({
+								...user_info,
+								message: segment.json(music_json)
+							});
+						}
 						index++;
 					}
 
@@ -794,10 +820,10 @@ async function music_handle(e, search, source, page = 0, page_size = 10, temp_da
 						});
 						index++;
 					}*/
-					let is_sign = true;
+					const friend = (e.bot || Bot)?.pickFriend(e.bot.uin || e.self_id || Bot.uin);
 					let forwardMsg = await Bot.makeForwardMsg(MsgList);
 					let forwardMsg_json = forwardMsg.data;
-					if (typeof (forwardMsg_json) === 'object') {
+					if (typeof (forwardMsg_json) === 'object' && !friend?.uploadLongMsg) {
 						if (forwardMsg_json.app === 'com.tencent.multimsg' && forwardMsg_json.meta?.detail) {
 							let detail = forwardMsg_json.meta.detail;
 							let resid = detail.resid;
@@ -811,14 +837,23 @@ async function music_handle(e, search, source, page = 0, page_size = 10, temp_da
 							forwardMsg.id = 35;
 						}
 					}
-					forwardMsg.data = forwardMsg.data
-						.replace('<?xml version="1.0" encoding="utf-8"?>', '<?xml version="1.0" encoding="UTF-8"?>')
-						.replace(/\n/g, '')
-						.replace(/<title color="#777777" size="26">(.+?)<\/title>/g, '___')
-						.replace(/___+/, `<title color="#777777" size="26">${title}</title>`);
-					if (!is_sign) {
+					if (!Version.isTrss && forwardMsg.type === 'xml') {
 						forwardMsg.data = forwardMsg.data
-							.replace('转发的', '不可转发的');
+							.replace('<?xml version="1.0" encoding="utf-8"?>', '<?xml version="1.0" encoding="UTF-8"?>')
+							.replace(/\n/g, '')
+							.replace(/<title color="#777777" size="26">(.+?)<\/title>/g, '___')
+							.replace(/___+/, `<title color="#777777" size="26">${title}</title>`);
+					} else if (!Version.isTrss && forwardMsg.type === 'json') {
+						let forwardMsg_json = forwardMsg.data;
+						if (forwardMsg_json.app === 'com.tencent.multimsg' && forwardMsg_json.meta?.detail) {
+							let detail = forwardMsg_json.meta.detail;
+							detail.news = [{ text: title }];
+						}
+					}
+					if (friend?.uploadLongMsg) {
+						try {
+							forwardMsg = await friend.uploadLongMsg(forwardMsg);
+						} catch { }
 					}
 					await e.reply(forwardMsg);
 					data = {
@@ -840,7 +875,7 @@ async function music_handle(e, search, source, page = 0, page_size = 10, temp_da
 					music.name = `${music.name}-${music.artist}`;
 					music.artist = tag;
 					let body = await CreateMusicShare(e, music);
-					await SendMusicShare(body);
+					await SendMusicShare(e, body);
 					data = {
 						time: new Date().getTime(),
 						data: [result.data[0]],
@@ -865,7 +900,7 @@ async function music_handle(e, search, source, page = 0, page_size = 10, temp_da
 					start_index: 0
 				};
 				let body = await CreateMusicShare(e, music);
-				await SendMusicShare(body);
+				await SendMusicShare(e, body)
 			}
 		}
 		xiaofei_plugin.music_temp_data[get_MusicListId(e)] = data;
@@ -1013,7 +1048,7 @@ async function ShareMusic_HtmlList(e, list, page, page_size, title = '') {//来�
 		background_path: background_path || _background_path,
 		title: `${title.split('').join(' ')}`,
 		tips: '请在一分钟内发送序号进行点歌' + (next_page ? '，发送【#下一页】查看更多' : '') + '！',
-		sub_title: `Created By Yunzai-Bot ${Version.yunzai} & xiaofei-Plugin ${Version.ver}`,
+		sub_title: `Created By ${Version.BotName} ${Version.yunzai} & xiaofei-Plugin ${Version.ver}`,
 		list: new_list,
 	};
 
@@ -1039,11 +1074,11 @@ async function ShareMusic_HtmlList(e, list, page, page_size, title = '') {//来�
 function get_MusicListId(e) {
 	let id = '';
 	if (e.guild_id) {
-		id = `guild_${e.channel_id}_${e.guild_id}`;
+		id = `guild_${e.channel_id}_${e.guild_id}_${e.self_id}`;
 	} else if (e.group) {
-		id = `group_${e.group.gid}_${e.user_id}`;
+		id = `group_${e.group?.gid || e.group.id}_${e.user_id}_${e.self_id}`;
 	} else {
-		id = `friend_${e.user_id}`;
+		id = `friend_${e.user_id}_${e.self_id}`;
 	}
 	return `${id}`;
 }
@@ -1080,7 +1115,7 @@ async function get_background() {
 	return background_url;
 }
 
-async function music_search(search, source, page = 1, page_size = 10) {
+async function music_search(e, search, source, page = 1, page_size = 10) {
 	let list = [];
 	let result = [];
 	let setting = Config.getdefSet('setting', 'system') || {};
@@ -1125,7 +1160,9 @@ async function music_search(search, source, page = 1, page_size = 10) {
 						if (res.code == 200) {
 							url = res.data[0]?.url || url;
 						}
-					} catch (err) { }
+					} catch (err) {
+						logger.error(err)
+					}
 				}
 				return url;
 			},
@@ -1182,7 +1219,7 @@ async function music_search(search, source, page = 1, page_size = 10) {
 						return res.data.url;
 					}
 				} catch (err) {
-					console.log(err)
+					logger.error(err)
 				}
 				return url;
 			},
@@ -1252,7 +1289,7 @@ async function music_search(search, source, page = 1, page_size = 10) {
 			},
 			url: async (data) => {
 				let code = md5(`${data.mid}q;z(&l~sdf2!nK`).substring(0, 5).toLocaleUpperCase();
-				let play_url = `http://c6.y.qq.com/rsc/fcgi-bin/fcg_pyq_play.fcg?songid=&songmid=${data.mid}&songtype=1&fromtag=50&uin=${Bot.uin}&code=${code}`;
+				let play_url = `http://c6.y.qq.com/rsc/fcgi-bin/fcg_pyq_play.fcg?songid=&songmid=${data.mid}&songtype=1&fromtag=50&uin=${e?.self_id || e.bot?.uin}&code=${code}`;
 				if ((data.sa == 0 && data.pay?.price_track == 0) || data.pay?.pay_play == 1 || music_high_quality) {//需要付费
 					let json_body = {
 						...music_cookies.qqmusic.body,
@@ -1291,7 +1328,7 @@ async function music_search(search, source, page = 1, page_size = 10) {
 						body: JSON.stringify(json_body)
 					};
 
-					let url = `https://u6.y.qq.com/cgi-bin/musicu.fcg`;
+					let url = `https://u.y.qq.com/cgi-bin/musicu.fcg`;
 					try {
 						let response = await fetch(url, options); //调用接口获取数据
 						let res = await response.json();
@@ -1308,7 +1345,9 @@ async function music_search(search, source, page = 1, page_size = 10) {
 								}
 							}
 						}
-					} catch (err) { }
+					} catch (err) {
+						logger.error(err)
+					}
 				}
 				return play_url;
 			},
@@ -1341,9 +1380,33 @@ async function music_search(search, source, page = 1, page_size = 10) {
 			url: null,
 			lrc: null,
 			api: async (data, types, music_data = {}) => {
-				let hash = data.hash;
-				let album_id = data.album_id;
-				let url = `https://wwwapi.kugou.com/yy/index.php?r=play/getdata&hash=${hash}&dfid=&appid=1014&mid=1234567890&platid=4&album_id=${album_id}&_=${new Date().getTime()}`;
+				let hash = data.hash || '';
+				let album_id = data.album_id || '';
+				let album_audio_id = data.album_audio_id || '';
+				let secret = 'NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt';
+				let params = {
+					appid: 1014,
+					clienttime: new Date().getTime(),
+					clientver: 20000,
+					dfid: '',
+					album_id,
+					album_audio_id,
+					hash,
+					mid: 123456789,
+					platid: 4,
+					srcappid: 2919,
+					token: '',
+					userid: 0,
+					uuid: ''
+				};
+				let param = [];
+				for (let key of Object.keys(params).sort()) {
+					param.push(`${key}=${params[key]}`);
+				}
+				param.push(`signature=${md5(`${secret}${param.join("")}${secret}`)}`)
+				param = param.join("&");
+				let url = `https://wwwapi.kugou.com/play/songinfo?${param}`;
+				//let url = `https://wwwapi.kugou.com/yy/index.php?r=play/getdata&hash=${hash}&dfid=&appid=1014&mid=1234567890&platid=4&album_id=${album_id}&_=${new Date().getTime()}`;
 				let response = await fetch(url); //调用接口获取数据
 				let res = await response.json(); //结果json字符串转对象
 
@@ -1441,7 +1504,7 @@ async function music_search(search, source, page = 1, page_size = 10) {
 					param += `&sign=${sign}`;
 					let response = await fetch(`${url}?${param}`);
 					let res = await response.json();
-					console.log(res);
+					logger.info(res);
 					if (res.data?.dash?.audio && res.data?.dash?.audio.length > 0) {
 						let audios = res.data?.dash?.audio;
 						audios = audios.sort((a, b) => {
@@ -1504,6 +1567,7 @@ async function music_search(search, source, page = 1, page_size = 10) {
 			result = await qqmusic_search(search, page, page_size);
 			break;
 	}
+
 	if (result && result.data && result.data.length > 0) {
 		page = result.page;
 		let result_data = result.data;
@@ -1543,7 +1607,6 @@ async function CreateMusicShareJSON(data) {
 			appid = 100495085;
 			app_name = '网易云音乐';
 			app_icon = 'https://i.gtimg.cn/open/app_icon/00/49/50/85/100495085_100_m.png';
-
 			break;
 		case 'kuwo':
 			appid = 100243533
@@ -1704,25 +1767,39 @@ async function CreateMusicShare(e, data, to_uin = null) {
 		10: send_type,
 		11: recv_uin,
 		12: {
-			10: title,
-			11: singer,
-			12: prompt,
-			13: jumpUrl,
-			14: preview,
-			16: musicUrl,
+			10: title || '',
+			11: singer || '',
+			12: prompt || '',
+			13: jumpUrl || '',
+			14: preview || '',
+			16: musicUrl || '',
 		},
 		19: recv_guild_id
 	};
+
+	if (e.bot?.adapter === 'OneBotv11' || e.bot?.adapter?.name === 'OneBotv11') {
+		body = { type: "music", data: { id: data.id } };
+		switch (data.source) {
+			case 'netease':
+				body.data.type = "163"
+				break;
+			case 'qq':
+			default:
+				body.data = { type: "custom", url: jumpUrl, audio: musicUrl, title, image: preview, singer }
+				break;
+		}
+	}
 	return body;
 }
 
-async function SendMusicShare(body) {
-
-	let payload = await Bot.sendOidb("OidbSvc.0xb77_9", core.pb.encode(body));
+async function SendMusicShare(e, body) {
+	if (e.bot?.adapter === 'OneBotv11' || e.bot?.adapter?.name === 'OneBotv11') return await e.reply(body), true
+	if (!e.bot.sendOidb) return await e.reply("当前协议不支持分享音乐card"), false;
+	let payload = await e.bot.sendOidb("OidbSvc.0xb77_9", core.pb.encode(body));
 
 	let result = core.pb.decode(payload);
-	console.log('share:' + result.toString());
 	if (result[3] != 0) {
+		logger.info('share:' + result.toString());
 		e.reply('歌曲分享失败：' + result[3], true);
 	}
 }
@@ -1759,15 +1836,7 @@ async function get_netease_userinfo(ck = null) {
 async function get_qqmusic_userinfo(ck = null) {
 	try {
 		let url = `https://c.y.qq.com/rsc/fcgi-bin/fcg_get_profile_homepage.fcg?_=${new Date().getTime()}&cv=4747474&ct=24&format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0&uin=0&g_tk_new_20200303=5381&g_tk=5381&cid=205360838&userid=0&reqfrom=1&reqtype=0&hostUin=0&loginUin=0`;
-		let cookies = [];
-		ck = ck || music_cookies.qqmusic.ck;
-
-		for (let key of ck.keys()) {
-			let value = ck.get(key);
-			if (value) {
-				cookies.push(`${key}=${value}`);
-			}
-		}
+		let cookies = getCookie(ck) || getCookie(music_cookies.qqmusic.ck) || [];
 
 		let options = {
 			method: 'GET',
@@ -1785,7 +1854,7 @@ async function get_qqmusic_userinfo(ck = null) {
 				code: 1, data: {
 					userid: ck.get('uin') || ck.get('wxuin'),
 					nickname: creator.nick,
-					is_vip: await is_qqmusic_vip(ck.get('uin') || ck.get('wxuin'))
+					is_vip: await is_qqmusic_vip(ck.get('uin') || ck.get('wxuin'), cookies.join('; '))
 				}
 			};
 		}
@@ -1804,12 +1873,11 @@ async function is_qqmusic_vip(uin, cookies = null) {
 			}
 		}
 	};
-
 	let options = {
 		method: 'POST',//post请求 
 		headers: {
 			'Content-Type': 'application/x-www-form-urlencoded',
-			'Cookie': cookies || Bot.cookies['y.qq.com']
+			'Cookie': cookies || Bot?.cookies?.['y.qq.com']
 		},
 		body: JSON.stringify(json)
 	};
@@ -2115,39 +2183,22 @@ async function bilibili_search(search, page = 1, page_size = 10) {
 async function qqmusic_search(search, page = 1, page_size = 10) {
 	try {
 		let qq_search_json = {
-			"comm": {
-				"_channelid": "19",
-				"_os_version": "6.2.9200-2",
-				"authst": "",
-				"ct": "19",
-				"cv": "1891",
-				"guid": md5(String(new Date().getTime()) + random(100000, 999999)),
-				"patch": "118",
-				"psrf_access_token_expiresAt": 0,
-				"psrf_qqaccess_token": "",
-				"psrf_qqopenid": "",
-				"psrf_qqunionid": "",
-				"tmeAppID": "qqmusic",
-				"tmeLoginType": 2,
-				"uin": "0",
-				"wid": "0"
-			},
+			"comm": { "uin": "0", "authst": "", "ct": 29 },
 			"search": {
-				"method": "DoSearchForQQMusicDesktop",
+				"method": "DoSearchForQQMusicMobile",
 				"module": "music.search.SearchCgiService",
 				"param": {
 					"grp": 1,
 					"num_per_page": 40,
 					"page_num": 1,
 					"query": "",
-					"remoteplace": "sizer.newclient.song",
+					"remoteplace": "miniapp.1109523715",
 					"search_type": 0,
-					"searchid": ""
+					"searchid": String(Date.now())
 				}
 			}
 		};
 
-		qq_search_json['search']['param']['searchid'] = md5(String(new Date().getTime()) + random(100000, 999999));
 		qq_search_json['search']['param']['query'] = search;
 		qq_search_json['search']['param']['page_num'] = page;
 		qq_search_json['search']['param']['num_per_page'] = page_size;
@@ -2156,8 +2207,8 @@ async function qqmusic_search(search, page = 1, page_size = 10) {
 			method: 'POST',//post请求 
 			headers: {
 				'User-Agent': 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)',
-				'Content-Type': 'application/x-www-form-urlencoded',
-				'Cookie': Bot.cookies['y.qq.com']
+				'Content-Type': 'application/json',
+				'Cookie': Bot?.cookies?.['y.qq.com'] || Config.getConfig('music', 'cookies')?.qqmusic || ''
 			},
 			body: JSON.stringify(qq_search_json)
 		};
@@ -2171,7 +2222,8 @@ async function qqmusic_search(search, page = 1, page_size = 10) {
 		if (res.code != '0') {
 			return null;
 		}
-		return { page: page, data: res.search.data.body.song.list };
+		let body = res.search?.data?.body || {};
+		return { page: page, data: body.song?.list || body.item_song || [] };
 	} catch (err) { }
 
 	return null;
@@ -2227,6 +2279,17 @@ function getCookieMap(cookie) {
 		cookieMap.set(entry[0], entry[1]);
 	}
 	return cookieMap || {};
+}
+
+function getCookie(map) {
+	const cookies = [];
+	for (let key of map.keys()) {
+		let value = map.get(key);
+		if (value) {
+			cookies.push(`${key}=${value}`);
+		}
+	}
+	return cookies;
 }
 
 function random(min, max) {

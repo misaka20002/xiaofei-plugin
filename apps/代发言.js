@@ -22,6 +22,7 @@ export class xiaofei_replace extends plugin {
 	}
 
 	async replace() {
+		const bot = this.e.bot || Bot;
 		if (!this.e.msg || !this.e.isMaster) {
 			return;
 		}
@@ -58,8 +59,10 @@ export class xiaofei_replace extends plugin {
 			e.message = message;
 			e.user_id = at;
 			e.from_id = at;
-
-			let nickname = e.group?.pickMember(at)?.nickname || Bot.pickFriend(at).nickname;
+			let nickname;
+			try {
+				nickname = e.group.pickMember(at).info?.nickname || Bot.pickFriend(at).info?.nickname
+			} catch { }
 			nickname = nickname || at;
 			e.sender.card = nickname;
 			e.sender.nickname = nickname;
@@ -71,8 +74,11 @@ export class xiaofei_replace extends plugin {
 			delete e.at;
 			delete e.uid;
 			delete e.msg;
-
-			loader.deal({ ...e });
+			try {
+				bot.em('message', { ...e });
+			} catch {
+				loader.deal({ ...e });
+			}
 			return true;
 		}
 	}
