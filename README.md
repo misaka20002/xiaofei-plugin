@@ -1,3 +1,6 @@
+```
+git clone https://github.com/misaka20002/xiaofei-plugin.git ./plugins/xiaofei-plugin/
+```
 ﻿# Yunzai-Bot_小飞插件
 
 #### 介绍
