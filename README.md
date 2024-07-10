@@ -1,11 +1,11 @@
 ```
 git clone https://github.com/misaka20002/xiaofei-plugin.git ./plugins/xiaofei-plugin/
 ```
-﻿# Yunzai-Bot_小飞插件
+
+
+# Yunzai-Bot_xiaofei-plugin
 
 #### 介绍
-
-交流群：938326742
 
 [查看更新](./CHANGELOG.md)
 
@@ -51,11 +51,6 @@ git clone https://github.com/xfdown/xiaofei-plugin.git ./plugins/xiaofei-plugin/
 
 #### 联系方式
 
-QQ：203017966
-
-Q群：938326742
-
-邮箱：w22649@139.com
 
 #### 参与贡献
 
