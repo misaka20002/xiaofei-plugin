@@ -16,11 +16,11 @@ git clone https://github.com/misaka20002/xiaofei-plugin.git ./plugins/xiaofei-pl
 推荐使用git进行安装，以方便后续升级。在Yunzai根目录夹打开终端，运行
 
 ```
-// 使用gitee
-git clone https://gitee.com/xfdown/xiaofei-plugin.git ./plugins/xiaofei-plugin/
+// 使用github加速
+git clone https://github.com/misaka20002/xiaofei-plugin.git ./plugins/xiaofei-plugin/
 
 // 使用github
-git clone https://github.com/xfdown/xiaofei-plugin.git ./plugins/xiaofei-plugin/
+git clone https://ghp.ci/https://github.com/misaka20002/xiaofei-plugin.git ./plugins/xiaofei-plugin/
 ```
 
 #### 使用说明
