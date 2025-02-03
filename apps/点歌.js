@@ -6,7 +6,7 @@ import { Config, Data, Version, Plugin_Path } from '../components/index.js';
 import uploadRecord from '../model/uploadRecord.js';
 
 let toSilk
-try{ toSilk = (await import('../model/toSilk.js')).default; } catch{ };
+try { toSilk = (await import('../model/toSilk.js')).default; } catch { };
 const no_pic = '';
 var _page_size = 20;
 var _music_timeout = 1000 * 60 * 3;
@@ -468,7 +468,7 @@ async function music_message(e) {
 						// 		if (Array.isArray(message.message)) message.message.push({ type: 'text', text: '[语音]' });
 						// 		await (e.group || e.friend)?.sendMsg('PCQQ不要播放，否则会导致语音无声音！', message);
 						// 	} catch (err) {
-						// 		let message = [ await segment.reply(result.message_id), `PCQQ不要播放，否则会导致语音无声音！` ];
+						// 		let message = [await segment.reply(result.message_id), `PCQQ不要播放，否则会导致语音无声音！`];
 						// 		await (e.group || e.friend)?.sendMsg(message);
 						// 	}
 						// }
@@ -527,7 +527,7 @@ async function music_message(e) {
 					// 		if (Array.isArray(message.message)) message.message.push({ type: 'text', text: '[语音]' });
 					// 		await (e.group || e.friend)?.sendMsg('PCQQ不要播放，否则会导致语音无声音！', message);
 					// 	} catch (err) {
-					// 		let message = [ await segment.reply(result.message_id), `PCQQ不要播放，否则会导致语音无声音！` ];
+					// 		let message = [await segment.reply(result.message_id), `PCQQ不要播放，否则会导致语音无声音！`];
 					// 		await (e.group || e.friend)?.sendMsg(message);
 					// 	}
 					// }
@@ -1746,7 +1746,7 @@ async function CreateMusicShare(e, data, to_uin = null) {
 		recv_guild_id = BigInt(e.guild_id);
 		send_type = 3;
 	} else if (to_uin == null) {//私聊
-		recv_uin = e.friend.uid;
+		recv_uin = e.friend.uin || e.friend.uid;
 		send_type = 0;
 	} else {//指定号码私聊
 		recv_uin = to_uin;
