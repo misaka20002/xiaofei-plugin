@@ -459,7 +459,8 @@ async function music_message(e) {
 						}
 						if (!isHigh) {
 							const tip = '上传[' + music.title + '-' + music.desc + ']失败！\n' + '链接：' + music.musicUrl + '\n尝试上传普通语音'
-							await e.reply(tip);
+							logger.info(e.msg + tip);
+							// await e.reply(tip);
 						}
 						result = await e.reply(result);
 						// if (reg[1].includes('播放') && result && isHigh) {
@@ -518,7 +519,8 @@ async function music_message(e) {
 					}
 					if (!isHigh) {
 						const tip = '上传[' + music.name + '-' + music.artist + ']失败！\n' + '链接：' + music_json.meta.music.musicUrl + '\n尝试上传普通语音'
-						await e.reply(tip);
+						logger.info(e.msg + tip);
+						// await e.reply(tip);
 					}
 					result = await e.reply(result)
 					// if (reg[1].includes('播放') && result && isHigh) {
