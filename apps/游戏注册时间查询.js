@@ -19,11 +19,11 @@ const GAME_META = {
 		bizCN: 'hk4e_cn',
 		bizGlobal: 'hk4e_global',
 		serverList: ['cn_gf01', 'cn_qd01', 'os_usa', 'os_euro', 'os_asia', 'os_cht'],
-		regionNameFilter: (name) => !['星穹列车', '无名客'].includes(name),
+		regionNameFilter: (name) => !['天空岛', '世界树'].includes(name),
 		isGlobal: (region) => region.includes('os_'),
 	},
 	sr: {
-		name: '星穹铁道',
+		name: '崩坏：星穹铁道',
 		bizCN: 'hkrpg_cn',
 		bizGlobal: 'hkrpg_global',
 		serverList: ['prod_gf_cn', 'prod_qd_cn', 'prod_official_usa', 'prod_official_euro', 'prod_official_asia', 'prod_official_cht'],
@@ -202,7 +202,7 @@ async function performBadgeLogin(account, uid, gameKey) {
 	const meta = GAME_META[gameKey];
 	const region = inferServerRegion(uid, gameKey);
 	const isGlobal = isGlobalServer(region, gameKey);
-	const apiBase = getApiBaseUrl(region, gameKey);
+	const apiBase = isGlobal ? API_BASE.Global : API_BASE.CN;
 	const gameBiz = isGlobal ? meta.bizGlobal : meta.bizCN;
 
 	const requestBody = {
